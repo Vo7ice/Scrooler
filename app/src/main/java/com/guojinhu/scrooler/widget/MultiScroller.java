@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.ScrollView;
@@ -23,9 +24,9 @@ public class MultiScroller extends FrameLayout {
     private ScrollView mScrollView;
     private TextView mTextView;
 
-    private float[] mLastEventPosition = {0, 0};
+
     private int mMaxHeight;
-    private int mTouchSlop;
+
 
     private MultiScrollerListener mListener;
 
@@ -42,7 +43,7 @@ public class MultiScroller extends FrameLayout {
         mScroller = new Scroller(context);
         mMaxHeight = (int) getResources().getDimension(R.dimen.empty_height);
 
-        //初始化一个最小滑动距离
+        //initilize one minimum fling position
         ViewConfiguration configuration = ViewConfiguration.get(context);
         mTouchSlop = configuration.getScaledTouchSlop();
     }
@@ -61,14 +62,14 @@ public class MultiScroller extends FrameLayout {
     public void computeScroll() {
         Log.d(TAG, "computeScroll");
 
-        if (mScroller.computeScrollOffset()){
-            Log.d(TAG,"x=="+mScroller.getCurrX()+",y=="+mScroller.getCurrY());
-            scrollTo(mScroller.getCurrX(),mScroller.getCurrY());
-            Log.d(TAG,"### getLeft is "+getLeft()+" ### getRight is "+getRight());
+        if (mScroller.computeScrollOffset()) {
+            Log.d(TAG, "x==" + mScroller.getCurrX() + ",y==" + mScroller.getCurrY());
+            scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
+            Log.d(TAG, "### getLeft is " + getLeft() + " ### getRight is " + getRight());
             //refresh UI
             postInvalidate();
-        }else{
-            Log.i(TAG,"have done scroll...");
+        } else {
+            Log.i(TAG, "have done scroll...");
         }
     }
 
@@ -78,43 +79,98 @@ public class MultiScroller extends FrameLayout {
     private int mTouchState = TOUCH_STATE_RESET;//initialize state
 
     private static int SNAP_VELOCITY = 600;// minimum velocity
+    private int mTouchSlop = 0;// minimum fling distance ,when over config move
+    private float[] mLastEventPosition = {0, 0}; //remember the last x position
+    // handle touch velocity
+    private VelocityTracker mVelocityTracker;
+
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        
-        return super.onInterceptTouchEvent(ev);
+        Log.d(TAG, "onInterceptTouchEvent -slop:" + mTouchSlop);
+        final int action = ev.getAction();
+        if (action == MotionEvent.ACTION_MOVE && mTouchState != TOUCH_STATE_RESET) {
+            return true;
+        }
+        final float x = ev.getX();
+        final float y = ev.getY();
+
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                Log.d(TAG, "onInterceptTouchEvent down");
+                updateLastEventPosition(ev);
+                Log.d(TAG, "isFinished--" + mScroller.isFinished());
+                mTouchState = mScroller.isFinished() ? TOUCH_STATE_RESET : TOUCH_STATE_SCROLLING;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                Log.d(TAG, "onInterceptTouchEvent move");
+                //when over minimum distance change state
+                final int yDiff = (int) Math.abs(mLastEventPosition[1] - y);
+                if (yDiff > mTouchSlop) {
+                    mTouchState = TOUCH_STATE_SCROLLING;
+                }
+                Log.d(TAG, "move yDiff---" + yDiff + ",y---" + y);
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                Log.d(TAG, "onInterceptTouchEvent up or cancel");
+                mTouchState = TOUCH_STATE_RESET;
+                break;
+        }
+        Log.e(TAG, mTouchState + "====" + TOUCH_STATE_RESET);
+        return mTouchState != TOUCH_STATE_RESET;
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        Log.d(TAG, "onTouchEvent start");
+
+        if (null == mVelocityTracker) {
+            mVelocityTracker = VelocityTracker.obtain();
+        }
+        mVelocityTracker.addMovement(event);
+
         int action = event.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
+                if (null != mScroller) {
+                    if (!mScroller.isFinished()) {
+                        mScroller.abortAnimation();
+                    }
+                }
                 updateLastEventPosition(event);
                 break;
             case MotionEvent.ACTION_UP:
 
                 break;
             case MotionEvent.ACTION_MOVE:
-
+                int deltaY = updatePositionAndComputeDelta(event);
+                scrollBy(0,deltaY);
+                Log.d(TAG,"MotionEvent.ACTION_MOVE --> detaY is "+deltaY);
                 break;
         }
-        return super.onTouchEvent(event);
+        return true;
     }
 
-    private void updateLastEventPosition(MotionEvent event){
+    private void updateLastEventPosition(MotionEvent event) {
         mLastEventPosition[0] = event.getX();
         mLastEventPosition[1] = event.getY();
-     }
-
-    @Override
-    public void scrollTo(int x, int y) {
-        final int delta = y - mScrollView.getScrollY();
-        if (delta > 0){
-            
-        }else{
-
-        }   
     }
+
+    private int updatePositionAndComputeDelta(MotionEvent event){
+        final int VERTICAL = 1;
+        final float position = mLastEventPosition[VERTICAL];
+        updateLastEventPosition(event);
+        return (int) (position - mLastEventPosition[VERTICAL]);
+    }
+//    @Override
+//    public void scrollTo(int x, int y) {
+//        final int delta = y - mScrollView.getScrollY();
+//        if (delta > 0) {
+//
+//        } else {
+//
+//        }
+//    }
 
     public interface MultiScrollerListener {
         void onScrolledOffBottom();
