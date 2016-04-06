@@ -14,9 +14,7 @@ import android.widget.TextView;
 
 import com.guojinhu.scrooler.R;
 
-/**
- * Created by guojin.hu on 2016/4/5.
- */
+
 public class MultiScroller extends FrameLayout {
 
     private static final String TAG = "MultiScroller";
@@ -156,8 +154,8 @@ public class MultiScroller extends FrameLayout {
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                Log.d(TAG, "MotionEvent.ACTION_UP:" + (mLastEventPosition[1]));
-                if (mLastEventPosition[1] > mMaxHeight) {
+                Log.d(TAG, "MotionEvent.ACTION_UP:" + (mMaxHeight) + ",DISTANCE:" + getScrollY() + ",bool:" + needRebound(mMaxHeight));
+                if (!needRebound(mMaxHeight)) {
                     mTouchState = TOUCH_STATE_BOTTOM;
                 } else {
                     mTouchState = TOUCH_STATE_RESET;
@@ -177,7 +175,8 @@ public class MultiScroller extends FrameLayout {
 
     private void stopDrag(boolean reset) {
         if (reset) {
-
+            Log.d(TAG, "Reset state");
+            scrollTo(0, 0);
         } else {
 
             if (mListener != null) {
@@ -185,6 +184,10 @@ public class MultiScroller extends FrameLayout {
                 mListener = null;
             }
         }
+    }
+
+    private boolean needRebound(int height) {
+        return (getScrollY() + height) > 0;
     }
 
     private void updateLastEventPosition(MotionEvent event) {
