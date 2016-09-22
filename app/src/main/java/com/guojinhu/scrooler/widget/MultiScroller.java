@@ -6,6 +6,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
+import android.widget.EdgeEffect;
 import android.widget.FrameLayout;
 import android.widget.ScrollView;
 import android.widget.Scroller;
@@ -13,9 +14,7 @@ import android.widget.TextView;
 
 import com.guojinhu.scrooler.R;
 
-/**
- * Created by guojin.hu on 2016/4/5.
- */
+
 public class MultiScroller extends FrameLayout {
 
     private static final String TAG = "MultiScroller";
@@ -23,6 +22,7 @@ public class MultiScroller extends FrameLayout {
     private Scroller mScroller;
     private ScrollView mScrollView;
     private TextView mTextView;
+    private EdgeEffect mEdgeGlowBottom;
 
 
     private int mMaxHeight;
@@ -46,6 +46,8 @@ public class MultiScroller extends FrameLayout {
         //initilize one minimum fling position
         ViewConfiguration configuration = ViewConfiguration.get(context);
         mTouchSlop = configuration.getScaledTouchSlop();
+
+        mEdgeGlowBottom = new EdgeEffect(context);
     }
 
     public MultiScroller(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
@@ -61,7 +63,6 @@ public class MultiScroller extends FrameLayout {
     @Override
     public void computeScroll() {
         Log.d(TAG, "computeScroll");
-
         if (mScroller.computeScrollOffset()) {
             Log.d(TAG, "x==" + mScroller.getCurrX() + ",y==" + mScroller.getCurrY());
             scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
@@ -132,6 +133,7 @@ public class MultiScroller extends FrameLayout {
         int action = event.getAction();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
+                Log.d(TAG, "MotionEvent.ACTION_DOWN:" + mScroller.isFinished());
                 if (null != mScroller) {
                     if (!mScroller.isFinished()) {
                         mScroller.abortAnimation();
@@ -139,16 +141,53 @@ public class MultiScroller extends FrameLayout {
                 }
                 updateLastEventPosition(event);
                 break;
-            case MotionEvent.ACTION_UP:
 
-                break;
             case MotionEvent.ACTION_MOVE:
                 int deltaY = updatePositionAndComputeDelta(event);
-                scrollBy(0,deltaY);
-                Log.d(TAG,"MotionEvent.ACTION_MOVE --> detaY is "+deltaY);
+                scrollBy(0, deltaY);
+                mEdgeGlowBottom.onPull(deltaY, 1 - event.getX() / getWidth());
+                if (!mEdgeGlowBottom.isFinished()) {
+                    postInvalidateOnAnimation();
+                }
+                Log.d(TAG, "MotionEvent.ACTION_MOVE --> detaY is " + deltaY);
+                break;
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                Log.d(TAG, "MotionEvent.ACTION_UP:" + (mMaxHeight) + ",DISTANCE:" + getScrollY() + ",bool:" + needRebound(mMaxHeight));
+                if (!needRebound(mMaxHeight)) {
+                    mTouchState = TOUCH_STATE_BOTTOM;
+                } else {
+                    mTouchState = TOUCH_STATE_RESET;
+                }
+                Log.d(TAG, "mTouchState:" + mTouchState);
+                stopDrag(mTouchState == TOUCH_STATE_RESET);
+                if (mVelocityTracker != null) {
+                    mVelocityTracker.recycle();
+                    mVelocityTracker = null;
+                }
+                mEdgeGlowBottom.onRelease();
+
                 break;
         }
         return true;
+    }
+
+    private void stopDrag(boolean reset) {
+        if (reset) {
+            Log.d(TAG, "Reset state");
+            scrollTo(0, 0);
+        } else {
+
+            if (mListener != null) {
+                mListener.onScrolledOffBottom();
+                mListener = null;
+            }
+        }
+    }
+
+    private boolean needRebound(int height) {
+        return (getScrollY() + height) > 0;
     }
 
     private void updateLastEventPosition(MotionEvent event) {
@@ -156,21 +195,12 @@ public class MultiScroller extends FrameLayout {
         mLastEventPosition[1] = event.getY();
     }
 
-    private int updatePositionAndComputeDelta(MotionEvent event){
+    private int updatePositionAndComputeDelta(MotionEvent event) {
         final int VERTICAL = 1;
         final float position = mLastEventPosition[VERTICAL];
         updateLastEventPosition(event);
         return (int) (position - mLastEventPosition[VERTICAL]);
     }
-//    @Override
-//    public void scrollTo(int x, int y) {
-//        final int delta = y - mScrollView.getScrollY();
-//        if (delta > 0) {
-//
-//        } else {
-//
-//        }
-//    }
 
     public interface MultiScrollerListener {
         void onScrolledOffBottom();
